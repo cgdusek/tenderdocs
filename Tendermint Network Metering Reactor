@@ -1,0 +1,421 @@
+\documentclass[a4paper,10pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{listings}
+\usepackage{enumitem}
+
+\lstset{%
+    basicstyle=\linespread{0.8}\small\ttfamily,
+    breaklines=true,
+    tabsize=2
+}
+
+%opening
+\title{Tendermint Network Metering Reactor}
+\author{Charles Dusek}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Decentralized network load balancing requires secure metering.  In order to accomplish this a network metering reactor will be designed for the Tendermint consensus engine.  This reactor will gather network measurements such as bandwidth, latency and packet loss from a set of neighbors and share those on a BFT CRDT.
+
+\end{abstract}
+
+\section{Introduction}
+As the number of users increases on an autonomous Byzantine Fault Tolerant decentralized system, load balancing is necessary to meet critical time constraints that dictate user experience.  The first step towards load balancing of a decentralized system is network metering.
+
+Tendermint is a Byzantine Fault Tolerant consensus engine that is used primarily to build blockchain applications.  Tendermint uses a gossip protocol to disseminate messages to all connected nodes as well as maintain a membership list.  The consensus can tolerate only f faulty or adverserial nodes and proposals are committed by a 2f+1 vote.
+
+The program structure of Tendermint follows the reactor pattern.  Early version of the reactor pattern may be found within the book "Pattern Languages of Program Design" by Jim Coplien and Douglas Schmidt in 1995.  An updated version was written by Douglas Schmidt called Reactor: An Object Behavioral Pattern for Demultiplexing and Dispatching Handles for Synchronous Events.
+
+\subsection{Command Line Interface}
+Tendermint uses the Cobra command line interface commander. Cobra provides the following features:
+\begin{itemize}
+
+\item Easy subcommand-based CLIs: app server, app fetch, etc.
+\item Fully POSIX-compliant flags (including short and long versions)
+\item Nested subcommands
+\item Global, local and cascading flags
+\item Easy generation of applications & commands with cobra init appname & cobra add cmdname
+\item Intelligent suggestions (app srver... did you mean app server?)
+\item Automatic help generation for commands and flags
+\item Automatic help flag recognition of -h, --help, etc.
+\item Automatically generated bash autocomplete for your application
+\item Automatically generated man pages for your application
+\item Command aliases so you can change things without breaking them
+\item The flexibility to define your own help, usage, etc.
+\item Optional tight integration with viper for 12-factor apps
+
+\end{itemize}
+
+\subsubsection{Application Structure}
+While you are welcome to provide your own organization, typically a Cobra-based application will follow the following organizational structure:
+\begin{itemize}
+\item appName
+\begin{itemize}
+\item cmd
+\begin {itemize}
+\item add.go
+\item your.go
+\item commands.go
+\item here.go
+\end{itemize}
+\item main.go
+\end{itemize}
+\end{itemize}
+\newpage
+Most implementations of Cobra use separate the main.go and the root.go files.  Tendermint combines these two files into the main.go and places it in the ./cmd/main.go
+\begin{lstlisting}
+package main
+
+import (
+	"os"
+	"path/filepath"
+
+	cmd "github.com/tendermint/tendermint/cmd/tendermint/commands"
+	"github.com/tendermint/tendermint/cmd/tendermint/commands/debug"
+	cfg "github.com/tendermint/tendermint/config"
+	"github.com/tendermint/tendermint/libs/cli"
+	nm "github.com/tendermint/tendermint/node"
+)
+
+func main() {
+	rootCmd := cmd.RootCmd
+	rootCmd.AddCommand(
+		cmd.GenValidatorCmd,
+		cmd.InitFilesCmd,
+		cmd.ProbeUpnpCmd,
+		cmd.LiteCmd,
+		cmd.ReplayCmd,
+		cmd.ReplayConsoleCmd,
+		cmd.ResetAllCmd,
+		cmd.ResetPrivValidatorCmd,
+		cmd.ShowValidatorCmd,
+		cmd.TestnetFilesCmd,
+		cmd.ShowNodeIDCmd,
+		cmd.GenNodeKeyCmd,
+		cmd.VersionCmd,
+		debug.DebugCmd,
+		cli.NewCompletionCmd(rootCmd, true),
+	)
+
+	// NOTE:
+	// Users wishing to:
+	//	* Use an external signer for their validators
+	//	* Supply an in-proc abci app
+	//	* Supply a genesis doc file from another source
+	//	* Provide their own DB implementation
+	// can copy this file and use something other than the
+	// DefaultNewNode function
+	nodeFunc := nm.DefaultNewNode
+
+	// Create & start node
+	rootCmd.AddCommand(cmd.NewRunNodeCmd(nodeFunc))
+
+	cmd := cli.PrepareBaseCmd(rootCmd, "TM", os.ExpandEnv(filepath.Join("$HOME", cfg.DefaultTendermintDir)))
+	if err := cmd.Execute(); err != nil {
+		panic(err)
+	}
+}
+\end{lstlisting}
+\newpage
+
+NewRunNodeCmd returns the command that allows the CLI to start a node. It can be used with a custom PrivValidator and in-process ABCI application. NewRunNodeCmd is found in ./cmd/tendermint/commands/run\textunderscore node.go:
+\begin{lstlisting}
+func NewRunNodeCmd(nodeProvider nm.Provider) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "node",
+		Short: "Run the tendermint node",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := checkGenesisHash(config); err != nil {
+				return err
+			}
+
+			n, err := nodeProvider(config, logger)
+			if err != nil {
+				return fmt.Errorf("failed to create node: %w", err)
+			}
+
+			if err := n.Start(); err != nil {
+				return fmt.Errorf("failed to start node: %w", err)
+			}
+
+			logger.Info("Started node", "nodeInfo", n.Switch().NodeInfo())
+
+			// Stop upon receiving SIGTERM or CTRL-C.
+			tmos.TrapSignal(logger, func() {
+				if n.IsRunning() {
+					n.Stop()
+				}
+			})
+
+			// Run forever.
+			select {}
+		},
+	}
+
+	AddNodeFlags(cmd)
+	return cmd
+}
+\end{lstlisting}
+
+
+\newpage
+\subsection{Communication}
+There are three forms of communication (e.g., requests, reponses, connections) that can happen in Tendermint Core
+\begin{itemize}
+\item Internode:
+communication between a node and other peers.  This kind of communication happens over TCP or HTTP.
+\item Intranode:
+communication within the node itself (i.e., between reactors or other components).  These are typically function or method calls, or occasionally happen through an event bus.
+\item Client:
+communication between a client (like a wallet or a browser) and a node on the network.
+\end{itemize}
+
+\newpage
+
+
+
+\section{Tendermint Switch Structure}
+
+The Tendermint switch handles the incoming traffic from the P2P network.  It is the interface between the node and the rest of the network and routes messages.
+
+\begin{itemize}
+\item Responsible for routing connections between peers
+\item Notably: only handles TCP connections; RPC/HTTP is separate
+\item Is a dependency for every reactor; all reactors expose a function `setSwitch`
+\item Holds onto channels (channels on the TCP connection--NOT Go channels) and uses them to route
+\item Is a global object, with a global namespace for messages
+\item Similar functionality to libp2p
+\end{itemize}
+
+\subsection{NewSwitch}
+The NewSwitch function can be found in p2p/switch.go with the code as follows:
+
+\begin{lstlisting}
+
+// NewSwitch creates a new Switch with the given config.
+func NewSwitch(
+	cfg *config.P2PConfig,
+	transport Transport,
+	options ...SwitchOption,
+) *Switch {
+	sw := &Switch{
+		config:               cfg,
+		reactors:             make(map[string]Reactor),
+		chDescs:              make([]*conn.ChannelDescriptor, 0),
+		reactorsByCh:         make(map[byte]Reactor),
+		peers:                NewPeerSet(),
+		dialing:              cmap.NewCMap(),
+		reconnecting:         cmap.NewCMap(),
+		metrics:              NopMetrics(),
+		transport:            transport,
+		filterTimeout:        defaultFilterTimeout,
+		persistentPeersAddrs: make([]*NetAddress, 0),
+		unconditionalPeerIDs: make(map[ID]struct{}),
+	}
+
+	// Ensure we have a completely undeterministic PRNG.
+	sw.rng = rand.NewRand()
+
+	sw.BaseService = *service.NewBaseService(nil, "P2P Switch", sw)
+
+	for _, option := range options {
+		option(sw)
+	}
+
+	return sw
+}
+\end{lstlisting}
+
+\subsection{createSwitch}
+
+Core Tendermint reactors are added to the switch in node/node.go
+
+\begin{lstlisting}
+func createSwitch(config *cfg.Config,
+	transport p2p.Transport,
+	p2pMetrics *p2p.Metrics,
+	peerFilters []p2p.PeerFilterFunc,
+	mempoolReactor *mempl.Reactor,
+	bcReactor p2p.Reactor,
+	consensusReactor *consensus.Reactor,
+	evidenceReactor *evidence.Reactor,
+	nodeInfo p2p.NodeInfo,
+	nodeKey *p2p.NodeKey,
+	p2pLogger log.Logger) *p2p.Switch {
+
+	sw := p2p.NewSwitch(
+		config.P2P,
+		transport,
+		p2p.WithMetrics(p2pMetrics),
+		p2p.SwitchPeerFilters(peerFilters...),
+	)
+	sw.SetLogger(p2pLogger)
+	sw.AddReactor("MEMPOOL", mempoolReactor)
+	sw.AddReactor("BLOCKCHAIN", bcReactor)
+	sw.AddReactor("CONSENSUS", consensusReactor)
+	sw.AddReactor("EVIDENCE", evidenceReactor)
+
+	sw.SetNodeInfo(nodeInfo)
+	sw.SetNodeKey(nodeKey)
+
+	p2pLogger.Info("P2P Node ID", "ID", nodeKey.ID(), "file", config.NodeKeyFile())
+	return sw
+}
+\end{lstlisting}
+
+\newpage
+
+\subsection{addReactors}
+
+\subsection{CustomReactors}
+
+CustomReactors allows you to add custom reactors (name -> p2p.Reactor) to the node's Switch.
+
+WARNING: using any name from the below list of the existing reactors will result in replacing it with the custom one.
+ - MEMPOOL
+ - BLOCKCHAIN
+ - CONSENSUS
+ - EVIDENCE
+ - PEX
+
+\begin{lstlisting}
+func CustomReactors(reactors map[string]p2p.Reactor) Option {
+	return func(n *Node) {
+		for name, reactor := range reactors {
+			if existingReactor := n.sw.Reactor(name); existingReactor != nil {
+				n.sw.Logger.Info("Replacing existing reactor with a custom one",
+					"name", name, "existing", existingReactor, "custom", reactor)
+				n.sw.RemoveReactor(name, existingReactor)
+			}
+			n.sw.AddReactor(name, reactor)
+		}
+	}
+}
+\end{lstlisting}
+
+
+
+The addReactor function may be found in the p2p directory inside the switch.go file as follows:                      
+
+\begin{lstlisting}
+// AddReactor adds the given reactor to the switch.
+// NOTE: Not goroutine safe.
+func (sw *Switch) AddReactor(name string, reactor Reactor) Reactor {
+	for _, chDesc := range reactor.GetChannels() {
+		chID := chDesc.ID
+		// No two reactors can share the same channel.
+		if sw.reactorsByCh[chID] != nil {
+			panic(
+				fmt.Sprintf(
+					"Channel %X has multiple reactors %v & %v", 
+					chID, 
+					sw.reactorsByCh[chID], 
+					reactor
+				)
+			)
+		}
+		sw.chDescs = append(sw.chDescs, chDesc)
+		sw.reactorsByCh[chID] = reactor
+	}
+	sw.reactors[name] = reactor
+	reactor.SetSwitch(sw)
+	return reactor
+}
+\end{lstlisting}
+
+\section{Tendermint Reactor Structure}
+
+The base Reactor type may be found in the p2p directory inside the base\textunderscore reactor.go file. 
+
+"Reactor is responsible for handling incoming messages on one or more channels. Switch calls GetChannels when reactor is added to it. When a new peer joins our node, InitPeer and AddPeer are called. RemovePeer is called when the peer is stopped. Receive is called when a message is received on a channel associated with this reactor. Peer Send or Peer TrySend should be used to send the message to a peer."
+
+\begin{lstlisting}
+
+type Reactor interface {
+	service.Service // Start, Stop
+
+	SetSwitch(*Switch)
+
+	GetChannels() []*conn.ChannelDescriptor
+
+	InitPeer(peer Peer) Peer
+
+	AddPeer(peer Peer)
+
+	RemovePeer(peer Peer, reason interface{})
+
+	Receive(chID byte, peer Peer, msgBytes []byte)
+}
+
+//--------------------------------------
+\end{lstlisting}
+\newpage
+
+
+
+\begin{itemize}[leftmargin=*]
+\item SetSwitch(*Switch)
+\newline\newline
+SetSwitch allows setting a switch. Every reactor holds a pointer to the global switch and the switch holds a pointer to every reactor. 
+\newline
+\item GetChannels() []*conn.ChannelDescriptor
+\newline\newline
+GetChannels returns the list of MConnection.ChannelDescriptor. Make sure that each ID is unique across all the reactors added to the switch.
+\newline
+\item InitPeer(peer Peer) Peer
+\newline\newline
+InitPeer is called by the switch before the peer is started. Use it to initialize data for the peer (e.g. peer state).
+\newline\newline
+NOTE: The switch won't call AddPeer nor RemovePeer if it fails to start the peer. Do not store any data associated with the peer in the reactor itself unless you don't want to have a state, which is never cleaned up.
+\newline
+\item AddPeer(peer Peer)
+\newline\newline
+AddPeer is called by the switch after the peer is added and successfully started. Use it to start goroutines communicating with the peer.
+\newline
+\item RemovePeer(peer Peer, reason interface{})
+\newline\newline
+RemovePeer is called by the switch when the peer is stopped (due to error or other reason).
+\item Receive(chID byte, peer Peer, msgBytes [ ]byte)
+\newline\newline
+Receive is called by the switch when msgBytes is received from the peer. \newline\newline
+NOTE: reactor can not keep msgBytes around after Receive completes without copying. \newline\newline
+CONTRACT: msgBytes are not nil.
+\end{itemize}
+
+\newpage
+\subsection{Mock Reactor}
+The mock reactor file is located in the p2p/mock/reactor.go file
+
+\begin{lstlisting}
+package mock
+
+import (
+	"github.com/tendermint/tendermint/libs/log"
+	"github.com/tendermint/tendermint/p2p"
+	"github.com/tendermint/tendermint/p2p/conn"
+)
+
+type Reactor struct {
+	p2p.BaseReactor
+}
+
+func NewReactor() *Reactor {
+	r := &Reactor{}
+	r.BaseReactor = *p2p.NewBaseReactor("Mock-PEX", r)
+	r.SetLogger(log.TestingLogger())
+	return r
+}
+
+func (r *Reactor) GetChannels() []*conn.ChannelDescriptor            { return []*conn.ChannelDescriptor{} }
+func (r *Reactor) AddPeer(peer p2p.Peer)                             {}
+func (r *Reactor) RemovePeer(peer p2p.Peer, reason interface{})      {}
+func (r *Reactor) Receive(chID byte, peer p2p.Peer, msgBytes []byte) {}
+\end{lstlisting}
+
+\subsection{Existing Tendermint Reactors}
+Tendermint currently contains five reactors in the 
+
+\end{document}
