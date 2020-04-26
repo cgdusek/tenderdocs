@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.14159265-2.6-1.40.18 (TeX Live 2017/Debian) (preloaded format=pdflatex 2020.4.12)  25 APR 2020 23:24
+This is pdfTeX, Version 3.14159265-2.6-1.40.18 (TeX Live 2017/Debian) (preloaded format=pdflatex 2020.4.12)  26 APR 2020 18:22
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -410,88 +410,103 @@ LaTeX Font Info:    Font shape `OMS/cmr/m/n' in size <10> not available
  [1
 
 {/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}] [2] [3] [4]
-Overfull \hbox (12.25066pt too wide) in paragraph at lines 163--165
-[]\OT1/cmr/m/n/10 The NewRunN-odeCmd func-tion takes the node-Provider with typ
-e nm.Provider.
- []
-
-
 Underfull \hbox (badness 10000) in paragraph at lines 163--165
 
  []
 
-[5] [6] [7] [8]
-Overfull \hbox (9.04503pt too wide) in paragraph at lines 382--383
+[5] [6]
+Overfull \hbox (132.51483pt too wide) in paragraph at lines 272--275
+\OT1/cmr/m/n/10 The priv-Val-ida-tor is gen-er-ated in NewN-ode with the func-t
+ion priv-val.LoadOrGenFilePV(newPrivValKey,
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 298--300
+
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 300--302
+
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 302--304
+
+ []
+
+[7] [8] [9] [10] [11]
+Overfull \hbox (9.04503pt too wide) in paragraph at lines 473--474
 \OT1/cmr/m/n/10 The base Re-ac-tor type may be found in the p2p di-rec-tory in-
 side the base[]reactor.go
  []
 
-[9] [10]
-Underfull \hbox (badness 10000) in paragraph at lines 411--415
+[12] [13]
+Underfull \hbox (badness 10000) in paragraph at lines 502--506
 
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 411--415
+Underfull \hbox (badness 10000) in paragraph at lines 502--506
 
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 415--419
+Underfull \hbox (badness 10000) in paragraph at lines 506--510
 
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 415--419
+Underfull \hbox (badness 10000) in paragraph at lines 506--510
 
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 419--425
+Underfull \hbox (badness 10000) in paragraph at lines 510--516
 
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 419--425
+Underfull \hbox (badness 10000) in paragraph at lines 510--516
 
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 419--425
+Underfull \hbox (badness 10000) in paragraph at lines 510--516
 
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 425--429
+Underfull \hbox (badness 10000) in paragraph at lines 516--520
 
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 425--429
+Underfull \hbox (badness 10000) in paragraph at lines 516--520
 
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 429--432
+Underfull \hbox (badness 10000) in paragraph at lines 520--523
 
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 432--437
+Underfull \hbox (badness 10000) in paragraph at lines 523--528
 
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 432--437
+Underfull \hbox (badness 10000) in paragraph at lines 523--528
 
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 432--437
+Underfull \hbox (badness 10000) in paragraph at lines 523--528
 
  []
 
-[11] [12] (./Tendermint Network Metering Reactor.aux) ) 
+[14] [15] (./Tendermint Network Metering Reactor.aux) ) 
 Here is how much of TeX's memory you used:
  2468 strings out of 494923
  31649 string characters out of 6180742
@@ -499,7 +514,7 @@ Here is how much of TeX's memory you used:
  5817 multiletter control sequences out of 15000+600000
  8669 words of font info for 31 fonts, out of 8000000 for 9000
  14 hyphenation exceptions out of 8191
- 26i,6n,32p,446b,1574s stack positions out of 5000i,500n,10000p,200000b,80000s
+ 26i,6n,32p,446b,1576s stack positions out of 5000i,500n,10000p,200000b,80000s
 </usr/share/texlive/texm
 f-dist/fonts/type1/public/amsfonts/cm/cmbx10.pfb></usr/share/texlive/texmf-dist
 /fonts/type1/public/amsfonts/cm/cmbx12.pfb></usr/share/texlive/texmf-dist/fonts
@@ -509,11 +524,11 @@ amsfonts/cm/cmr12.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfont
 s/cm/cmr17.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cm
 r9.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb
 ></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt9.pfb>
-Output written on "Tendermint Network Metering Reactor.pdf" (12 pages, 138696 b
+Output written on "Tendermint Network Metering Reactor.pdf" (15 pages, 144475 b
 ytes).
 PDF statistics:
- 79 PDF objects out of 1000 (max. 8388607)
- 55 compressed objects within 1 object stream
+ 89 PDF objects out of 1000 (max. 8388607)
+ 62 compressed objects within 1 object stream
  0 named destinations out of 1000 (max. 500000)
  1 words of extra memory for PDF output out of 10000 (max. 10000000)
 
