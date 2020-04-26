@@ -159,16 +159,20 @@ func NewRunNodeCmd(nodeProvider nm.Provider) *cobra.Command {
 	return cmd
 }
 \end{lstlisting}
+\newpage
+The NewRunNodeCmd function takes the nodeProvider with type nm.Provider.  The nm.Provider type is found in the "node" go package which is the main entry point, where the Node struct, which represents a full node, is defined.
+\newline
 
-The NewRunNodeCmd function takes the nodeProvider with type nm.Provider.  The nm.Provider type is found in the "node" go package which is the main entry point, where the Node struct, which represents a full node, is defined.  The nm.Provider type is found in the ./node/node.go file:
+Provider takes a config and a logger and returns a ready to go Node. The nm.Provider type is found in the ./node/node.go file:
 
 \begin{lstlisting}
-// Provider takes a config and a logger and returns a ready to go Node.
 type Provider func(*cfg.Config, log.Logger) (*Node, error)
+\end{lstlisting}
 
-// DefaultNewNode returns a Tendermint node with default settings for the
-// PrivValidator, ClientCreator, GenesisDoc, and DBProvider.
-// It implements NodeProvider.
+DefaultNewNode, which is also found in the ./node/node.go file, returns a Tendermint node with default settings for the PrivValidator, ClientCreator, GenesisDoc, and DBProvider. It implements NodeProvider.
+
+\begin{lstlisting}
+
 func DefaultNewNode(config *cfg.Config, logger log.Logger) (*Node, error) {
 	// Generate node PrivKey
 	nodeKey, err := p2p.LoadOrGenNodeKey(config.NodeKeyFile())
