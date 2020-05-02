@@ -2,6 +2,11 @@
 \usepackage[utf8]{inputenc}
 \usepackage{listings}
 \usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage[linesnumbered,commentsnumbered,ruled,vlined, longend]{algorithm2e}
+
+\newcommand\mycommfont[1]{\small\ttfamily\textcolor{blue}{#1}}
+\SetCommentSty{mycommfont}
 
 \lstset{%
     basicstyle=\linespread{0.8}\small\ttfamily,
@@ -23,11 +28,52 @@ Decentralized network load balancing requires secure metering.  In order to acco
 \end{abstract}
 
 \section{Introduction}
-As the number of users increases on an autonomous Byzantine Fault Tolerant decentralized system, load balancing is necessary to meet critical time constraints that dictate user experience.  The first step towards load balancing of a decentralized system is network metering.
+As the number of users increases on an autonomous Byzantine Fault Tolerant decentralized system, load balancing is necessary to meet critical time constraints that dictate user experience.  The first step towards load balancing of a decentralized system is generalized network metering. This includes bandwidth, latency, loss, as well as RTT for various signed computational challenges to determine the nodes load.
 
-Tendermint is a Byzantine Fault Tolerant consensus engine that is used primarily to build blockchain applications.  Tendermint uses a gossip protocol to disseminate messages to all connected nodes as well as maintain a membership list.  The consensus can tolerate only f faulty or adverserial nodes and proposals are committed by a 2f+1 vote.
+Decentralized network coordinate methodologies are used to generate estimated maps of networks in a way that minimizes communication, increases fault tolerance and shares the load of computing by co-operative machine learning.  The particular method that is used as part of this protocol may be generalized for any network measurement and is node-churn stable by using a self-stabilizing distributed maximum margin matrix factorization algorithm.
 
-Byzantine Fault Tolerant consensus allows for verification of tests and agreement on violations of the network metering protocol.  Pair-wise network metering relies on nodes interacting and reporting network measurements in a truthful manner.  Within an adverserial environment, Byzantine node are incentivized to report false network measurements in order receive more rewards.  In order to verify the measurements are taken and shared according to the protocol, an added verification step is needed that statistically samples the nodes on the system for faulty protocol implementations.  Any node that is exhibiting faulty behavior will be reported and those reports will be additionally verified.  If either the faulty node or a byzantine reporter are verified they will be blacklisted. 
+Within an adverserial environment, Byzantine node are incentivized to report false network measurements in order receive more rewards by reporting lower lower latency. Byzantine Fault Tolerant consensus allows for verification of tests and agreement on violations of the network metering protocol. Pair-wise network metering relies on nodes interacting and reporting network measurements in a truthful manner.  In order to verify the measurements are taken and shared according to the protocol, an added verification step is needed that statistically samples the nodes on the system for faulty protocol implementations.  
+
+Each node entrant to the system will be accepted based on their network coordinate error or skew.  Any node that is exhibiting faulty behavior will not accepted into the network and will be reported.  Additionally, during each round, nodes will sample from their neighbor set to compare their neighbors coordinates with actual network measurements that are taken during the round.  Any node exihibiting out of bounds error between coordinate estimated network measurements and actual mesaurement will be reported.  Finally, reports of accepted nodes exhibiting faulty behavior will be verified through a consensus mechanism that verifies measurements between the the reporting node and the accused node using third party nodes.  If either the faulty node or a byzantine reporter are confirmed by consensus agreement agreement amonst accepted nodes that they are guilty of the accusation the convicted node will be blacklisted.
+
+\begin{algorithm}[H]
+\DontPrintSemicolon
+  
+  \KwIn{Your Input}
+  \KwOut{Your output}
+  \KwData{Testing set $x$}
+  $\sum_{i=1}^{\infty} := 0$ \tcp*{this is a comment}
+  \tcc{Now this is an if...else conditional loop}
+  \If{Condition 1}
+    {
+        Do something    \tcp*{this is another comment}
+        \If{sub-Condition}
+        {Do a lot}
+    }
+    \ElseIf{Condition 2}
+    {
+    	Do Otherwise \;
+        \tcc{Now this is a for loop}
+        \For{sequence}    
+        { 
+        	loop instructions
+        }
+    }
+    \Else
+    {
+    	Do the rest
+    }
+    
+    \tcc{Now this is a While loop}
+   \While{Condition}
+   {
+   		Do something\;
+   }
+
+\caption{Network Metering Protocol - PLUG To Be Completed}
+\end{algorithm}
+
+Consensus within the network is assured through the Tendermint protocol.  Tendermint is a Byzantine Fault Tolerant consensus engine that is used primarily to build blockchain applications.  Tendermint uses a gossip protocol to maintain a membership list as well as disseminate messages.  Tendermint consensus may tolerate only f faulty or adverserial nodes and proposals are committed by a 2f+1 vote.
 
 The program structure of Tendermint follows the reactor pattern.  Early version of the reactor pattern may be found within the book "Pattern Languages of Program Design" by Jim Coplien and Douglas Schmidt in 1995.  An updated version was written by Douglas Schmidt called Reactor: An Object Behavioral Pattern for Demultiplexing and Dispatching Handles for Synchronous Events.
 
@@ -51,7 +97,7 @@ Tendermint uses the Cobra command line interface commander. Cobra provides the f
 
 \end{itemize}
 
-\subsubsection{Application Structure}
+\subsubsection{Main}
 While you are welcome to provide your own organization, typically a Cobra-based application will follow the following organizational structure:
 \begin{itemize}
 \item appName
@@ -121,8 +167,106 @@ func main() {
 	}
 }
 \end{lstlisting}
+\subsubsection{Root}
+The RootCmd is found within the ./cmd/tendermint/commands/root.go file:
+\begin{lstlisting}
+// RootCmd is the root command for Tendermint core.
+var RootCmd = &cobra.Command{
+	Use:   "tendermint",
+	Short: "Tendermint Core (BFT Consensus) in Go",
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) (err error) {
+		if cmd.Name() == VersionCmd.Name() {
+			return nil
+		}
+		config, err = ParseConfig()
+		if err != nil {
+			return err
+		}
+		if config.LogFormat == cfg.LogFormatJSON {
+			logger = log.NewTMJSONLogger(log.NewSyncWriter(os.Stdout))
+		}
+		logger, err = tmflags.ParseLogLevel(config.LogLevel, logger, cfg.DefaultLogLevel())
+		if err != nil {
+			return err
+		}
+		if viper.GetBool(cli.TraceFlag) {
+			logger = log.NewTracingLogger(logger)
+		}
+		logger = logger.With("module", "main")
+		return nil
+	},
+}
+\end{lstlisting}
 \newpage
+\subsection{tendermint init}
+InitFilesCmd initialises a fresh Tendermint Core instance.  The InitFileCmd cobra command variable uses the handle "init" and is found within the ./cmd/tendermint/commands/init.go file: 
+\begin{lstlisting}
+var InitFilesCmd = &cobra.Command{
+	Use:   "init",
+	Short: "Initialize Tendermint",
+	RunE:  initFiles,
+}
 
+func initFiles(cmd *cobra.Command, args []string) error {
+	return initFilesWithConfig(config)
+}
+
+func initFilesWithConfig(config *cfg.Config) error {
+	// private validator
+	privValKeyFile := config.PrivValidatorKeyFile()
+	privValStateFile := config.PrivValidatorStateFile()
+	var pv *privval.FilePV
+	if tmos.FileExists(privValKeyFile) {
+		pv = privval.LoadFilePV(privValKeyFile, privValStateFile)
+		logger.Info("Found private validator", "keyFile", privValKeyFile,
+			"stateFile", privValStateFile)
+	} else {
+		pv = privval.GenFilePV(privValKeyFile, privValStateFile)
+		pv.Save()
+		logger.Info("Generated private validator", "keyFile", privValKeyFile,
+			"stateFile", privValStateFile)
+	}
+
+	nodeKeyFile := config.NodeKeyFile()
+	if tmos.FileExists(nodeKeyFile) {
+		logger.Info("Found node key", "path", nodeKeyFile)
+	} else {
+		if _, err := p2p.LoadOrGenNodeKey(nodeKeyFile); err != nil {
+			return err
+		}
+		logger.Info("Generated node key", "path", nodeKeyFile)
+	}
+
+	// genesis file
+	genFile := config.GenesisFile()
+	if tmos.FileExists(genFile) {
+		logger.Info("Found genesis file", "path", genFile)
+	} else {
+		genDoc := types.GenesisDoc{
+			ChainID:         fmt.Sprintf("test-chain-%v", tmrand.Str(6)),
+			GenesisTime:     tmtime.Now(),
+			ConsensusParams: types.DefaultConsensusParams(),
+		}
+		pubKey, err := pv.GetPubKey()
+		if err != nil {
+			return errors.Wrap(err, "can't get pubkey")
+		}
+		genDoc.Validators = []types.GenesisValidator{{
+			Address: pubKey.Address(),
+			PubKey:  pubKey,
+			Power:   10,
+		}}
+
+		if err := genDoc.SaveAs(genFile); err != nil {
+			return err
+		}
+		logger.Info("Generated genesis file", "path", genFile)
+	}
+
+	return nil
+}
+\end{lstlisting}
+\subsection{tendermint node}
 NewRunNodeCmd returns the command that allows the CLI to start a node. It can be used with a custom PrivValidator and in-process ABCI application. NewRunNodeCmd is found in ./cmd/tendermint/commands/run\textunderscore node.go:
 \begin{lstlisting}
 func NewRunNodeCmd(nodeProvider nm.Provider) *cobra.Command {
@@ -249,8 +393,7 @@ type Node struct {
 }
 \end{lstlisting}
 \newpage
-\subsection{NewNode}
-At the heart of Tendermint is the NewNode function.  The NewNode function returns an object of the type Node that represents the Tendermint Node. The NewNode function is rather lengthy so it will be broken down by parts from beginning to end.  The NewNode function is found within the ./node/node.go file:
+At the heart of Tendermint is the NewNode function.  The NewNode function returns an object of the type Node that represents the Tendermint Node. The NewNode function is rather lengthy so it will be broken down into sections by function beginning with parameters to end.  The NewNode function is found within the ./node/node.go file:
 
 \subsubsection{Parameters}
 \begin{lstlisting}
@@ -294,14 +437,9 @@ func DefaultGenesisDocProviderFunc(config *cfg.Config) GenesisDocProvider {
 \end{lstlisting}
 \item dbProvider DBProvider
 \newline
-DBProvider takes a DBContext and returns an instantiated DB. DefaultDBProvider returns a database using the DBBackend and DBDir specified in the ctx.Config. Below from ./node/node.go
+DBProvider takes a DBContext and returns instantiated DBs.
 \begin{lstlisting}
 type DBProvider func(*DBContext) (dbm.DB, error)
-
-func DefaultDBProvider(ctx *DBContext) (dbm.DB, error) {
-	dbType := dbm.BackendType(ctx.Config.DBBackend)
-	return dbm.NewDB(ctx.ID, dbType, ctx.Config.DBDir()), nil
-}
 \end{lstlisting}
 \item metricsProvider MetricsProvider
 \newline
@@ -328,15 +466,15 @@ func DefaultMetricsProvider(config *cfg.InstrumentationConfig) MetricsProvider {
 \item options ...Option
 \newline
 \end{itemize}
-\subsubsection{blockStore and stateDB}
-The blockStore and stateDB are generated in the following code:
+\subsubsection{Initialize Databases}
+The blockStore and stateDB are generated in the following function:
 \begin{lstlisting}
 blockStore, stateDB, err := initDBs(config, dbProvider)
 if err != nil {
 	return nil, err
 }
 \end{lstlisting}
-Where func initDBs(config, dbProvider) is:
+The initDBs(config, dbProvider) function is also found in the ./node/node.go file:
 \begin{lstlisting}
 func initDBs(config *cfg.Config, dbProvider DBProvider) (blockStore *store.BlockStore, stateDB dbm.DB, err error) {
 	var blockStoreDB dbm.DB
@@ -354,10 +492,266 @@ func initDBs(config *cfg.Config, dbProvider DBProvider) (blockStore *store.Block
 	return
 }
 \end{lstlisting}
+The DBContext struct type, dbProvider func type, and the DefaultDBProvider function are also declared in the ./node/node.go file:
+\begin{lstlisting}
+type DBContext struct {
+	ID     string
+	Config *cfg.Config
+}
 
+type DBProvider func(*DBContext) (dbm.DB, error)
 
+func DefaultDBProvider(ctx *DBContext) (dbm.DB, error) {
+	dbType := dbm.BackendType(ctx.Config.DBBackend)
+	return dbm.NewDB(ctx.ID, dbType, ctx.Config.DBDir()), nil
+}
+\end{lstlisting}
+Todo: Fill out the DB portion here starting with dbm.BackendTye()
+\subsubsection{Initialize State}
+The state and genDoc are generated with the following function:
+\begin{lstlisting}
+state, genDoc, err := LoadStateFromDBOrGenesisDocProvider(stateDB, genesisDocProvider)
+if err != nil {
+	return nil, err
+}
+\end{lstlisting}
+LoadStateFromDBOrGenesisDocProvider attempts to load the state from the database, or creates one using the given genesisDocProvider and persists the result to the database. On success this also returns the genesis doc loaded through the given provider.  It is also found within the ./node/node.go file                                                                                                                                
+\begin{lstlisting}
+func LoadStateFromDBOrGenesisDocProvider(
+	stateDB dbm.DB,
+	genesisDocProvider GenesisDocProvider,
+) (sm.State, *types.GenesisDoc, error) {
+	// Get genesis doc
+	genDoc, err := loadGenesisDoc(stateDB)
+	if err != nil {
+		genDoc, err = genesisDocProvider()
+		if err != nil {
+			return sm.State{}, nil, err
+		}
+		// save genesis doc to prevent a certain class of user errors (e.g. when it
+		// was changed, accidentally or not). Also good for audit trail.
+		saveGenesisDoc(stateDB, genDoc)
+	}
+	state, err := sm.LoadStateFromDBOrGenesisDoc(stateDB, genDoc)
+	if err != nil {
+		return sm.State{}, nil, err
+	}
+	return state, genDoc, nil
+}
+\end{lstlisting}
+If state already exists with the stateDB then the following function will load it:
+\begin{lstlisting}
+// panics if failed to unmarshal bytes
+func loadGenesisDoc(db dbm.DB) (*types.GenesisDoc, error) {
+	b, err := db.Get(genesisDocKey)
+	if err != nil {
+		panic(err)
+	}
+	if len(b) == 0 {
+		return nil, errors.New("genesis doc not found")
+	}
+	var genDoc *types.GenesisDoc
+	err = cdc.UnmarshalJSON(b, &genDoc)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to load genesis doc due to unmarshaling error: %v (bytes: %X)", err, b))
+	}
+	return genDoc, nil
+}
+\end{lstlisting}
+This function saves the genesis doc to prevent a certain class of user errors (e.g. when it was changed, accidentally or not). Also good for audit trail.
+\begin{lstlisting}
+// panics if failed to marshal the given genesis document
+func saveGenesisDoc(db dbm.DB, genDoc *types.GenesisDoc) {
+	b, err := cdc.MarshalJSON(genDoc)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to save genesis doc due to marshaling error: %v", err))
+	}
+	db.SetSync(genesisDocKey, b)
+}
+\end{lstlisting}
+\subsubsection{Create Proxy and ABCI Connections}
+Create the proxyApp and establish connections to the ABCI app (consensus, mempool, query).
+\begin{lstlisting}
+proxyApp, err := createAndStartProxyAppConns(clientCreator, logger)
+if err != nil {
+    return nil, err
+}
+\end{lstlisting}
+The ClientCreator type is found within the ./proxy/client.go file:
+\begin{lstlisting}
+type ClientCreator interface {
+	NewABCIClient() (abcicli.Client, error)
+}
+\end{lstlisting}
+The DefaultNewNode function inputs the proxy.DefaultClientCreator as the clientCreator parameter.  The DefaultClientCreator is found within the ./proxy/client.go file:
+\begin{lstlisting}
+func DefaultClientCreator(addr, transport, dbDir string) ClientCreator {
+	switch addr {
+	case "counter":
+		return NewLocalClientCreator(counter.NewApplication(false))
+	case "counter_serial":
+		return NewLocalClientCreator(counter.NewApplication(true))
+	case "kvstore":
+		return NewLocalClientCreator(kvstore.NewApplication())
+	case "persistent_kvstore":
+		return NewLocalClientCreator(kvstore.NewPersistentKVStoreApplication(dbDir))
+	case "noop":
+		return NewLocalClientCreator(types.NewBaseApplication())
+	default:
+		mustConnect := false // loop retrying
+		return NewRemoteClientCreator(addr, transport, mustConnect)
+	}
+}
+\end{lstlisting}
 
+Add parameters in Config file here\newline\newline
+The helper function for Proxy creation is below:
+\begin{lstlisting}
+func createAndStartProxyAppConns(clientCreator proxy.ClientCreator, logger log.Logger) (proxy.AppConns, error) {
+	proxyApp := proxy.NewAppConns(clientCreator)
+	proxyApp.SetLogger(logger.With("module", "proxy"))
+	if err := proxyApp.Start(); err != nil {
+		return nil, fmt.Errorf("error starting proxy app connections: %v", err)
+	}
+	return proxyApp, nil
+}
+\end{lstlisting}
+NewABCIClient returns newly connected client that is also found within the ./proxy/client.go file:
+\begin{lstlisting}
+func (r *remoteClientCreator) NewABCIClient() (abcicli.Client, error) {
+	remoteApp, err := abcicli.NewClient(r.addr, r.transport, r.mustConnect)
+	if err != nil {
+		return nil, errors.Wrap(err, "Failed to connect to proxy")
+	}
+	return remoteApp, nil
+}
+\end{lstlisting}
+NewClient returns a new ABCI client of the specified transport type. It returns an error if the transport is not "socket" or "grpc". The NewClient function is found in the ./abci/client.go file.
+\begin{lstlisting}
+func NewClient(addr, transport string, mustConnect bool) (client Client, err error) {
+	switch transport {
+	case "socket":
+		client = NewSocketClient(addr, mustConnect)
+	case "grpc":
+		client = NewGRPCClient(addr, mustConnect)
+	default:
+		err = fmt.Errorf("unknown abci transport %s", transport)
+	}
+	return
+}
+\end{lstlisting}
+\subsubsection{Event Bus and Indexer Service}
+EventBus and IndexerService must be started before the handshake because we might need to index the txs of the replayed block as this might not have happened when the node stopped last time (i.e. the node stopped after it saved the block but before it indexed the txs, or, endblocker panicked)
+\begin{lstlisting}
+eventBus, err := createAndStartEventBus(logger)
+if err != nil {
+	return nil, err
+}
 
+// Transaction indexing
+indexerService, txIndexer, err := createAndStartIndexerService(config, dbProvider, eventBus, logger)
+if err != nil {
+	return nil, err
+}
+\end{lstlisting}
+The createAndStartEventBus(logger) function is found within the ./node/node.go file:
+\begin{lstlisting}
+func createAndStartEventBus(logger log.Logger) (*types.EventBus, error) {
+	eventBus := types.NewEventBus()
+	eventBus.SetLogger(logger.With("module", "events"))
+	if err := eventBus.Start(); err != nil {
+		return nil, err
+	}
+	return eventBus, nil
+}
+\end{lstlisting}
+EventBus is a common bus for all events going through the system. All calls are proxied to underlying pubsub server. All events must be published using EventBus to ensure correct data types. The EventBus functionality below is found within the ./types/event\textunderscore bus.go file:
+\begin{lstlisting}
+type EventBus struct {
+	service.BaseService
+	pubsub *tmpubsub.Server
+}
+
+// NewEventBus returns a new event bus.
+func NewEventBus() *EventBus {
+	return NewEventBusWithBufferCapacity(defaultCapacity)
+}
+
+// NewEventBusWithBufferCapacity returns a new event bus with the given buffer capacity.
+func NewEventBusWithBufferCapacity(cap int) *EventBus {
+	// capacity could be exposed later if needed
+	pubsub := tmpubsub.NewServer(tmpubsub.BufferCapacity(cap))
+	b := &EventBus{pubsub: pubsub}
+	b.BaseService = *service.NewBaseService(nil, "EventBus", b)
+	return b
+}
+
+func (b *EventBus) SetLogger(l log.Logger) {
+	b.BaseService.SetLogger(l)
+	b.pubsub.SetLogger(l.With("module", "pubsub"))
+}
+\end{lstlisting}
+Key value indexer is default.  It is the simplest possible indexer backed by key-value storage which defaults to LevelDB.
+\begin{lstlisting}
+// TxIndexConfig
+// Remember that Event has the following structure:
+// type: [
+//  key: value,
+//  ...
+// ]
+//
+// CompositeKeys are constructed by `type.key`
+// TxIndexConfig defines the configuration for the transaction indexer,
+// including composite keys to index.
+type TxIndexConfig struct {
+	// What indexer to use for transactions
+	//
+	// Options:
+	//   1) "null"
+	//   2) "kv" (default) - the simplest possible indexer,
+	//      backed by key-value storage (defaults to levelDB; see DBBackend).
+	Indexer string `mapstructure:"indexer"`
+
+	// Comma-separated list of compositeKeys to index (by default the only key is "tx.hash")
+	//
+	// You can also index transactions by height by adding "tx.height" key here.
+	//
+	// It's recommended to index only a subset of keys due to possible memory
+	// bloat. This is, of course, depends on the indexer's DB and the volume of
+	// transactions.
+	IndexKeys string `mapstructure:"index_keys"`
+
+	// When set to true, tells indexer to index all compositeKeys (predefined keys:
+	// "tx.hash", "tx.height" and all keys from DeliverTx responses).
+	//
+	// Note this may be not desirable (see the comment above). IndexKeys has a
+	// precedence over IndexAllKeys (i.e. when given both, IndexKeys will be
+	// indexed).
+	IndexAllKeys bool `mapstructure:"index_all_keys"`
+}
+
+// DefaultTxIndexConfig returns a default configuration for the transaction indexer.
+func DefaultTxIndexConfig() *TxIndexConfig {
+	return &TxIndexConfig{
+		Indexer:      "kv",
+		IndexKeys:    "",
+		IndexAllKeys: false,
+	}
+}
+
+// TestTxIndexConfig returns a default configuration for the transaction indexer.
+func TestTxIndexConfig() *TxIndexConfig {
+	return DefaultTxIndexConfig()
+}
+\end{lstlisting}
+\subsubsection{Handshaker}
+Handshaker calls RequestInfo, sets the AppVersion on the state, and replays any blocks as necessary to sync tendermint with the app.
+\begin{lstlisting}
+consensusLogger := logger.With("module", "consensus")
+if err := doHandshake(stateDB, state, blockStore, genDoc, eventBus, proxyApp, consensusLogger); err != nil {
+	return nil, err
+}
+\end{lstlisting}
 \newpage
 \subsection{Communication}
 There are three forms of communication (e.g., requests, reponses, connections) that can happen in Tendermint Core
@@ -371,8 +765,6 @@ communication between a client (like a wallet or a browser) and a node on the ne
 \end{itemize}
 
 \newpage
-
-
 
 \section{Tendermint Switch Structure}
 
