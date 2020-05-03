@@ -113,7 +113,40 @@ While you are welcome to provide your own organization, typically a Cobra-based 
 \end{itemize}
 \end{itemize}
 \newpage
-While most implementations of Cobra use separate main.go and root.go files, Tendermint combines these two files into the main.go and places it in the ./cmd/main.go
+Tendermint uses two main files main.go and a root.go to initialize the commands.  The root command for the Tendermint core is found within the ./cmd/tendermint/commands/root.go file:
+
+\subsubsection{Root}
+The RootCmd is found within the ./cmd/tendermint/commands/root.go file:
+\begin{lstlisting}
+// RootCmd is the root command for Tendermint core.
+var RootCmd = &cobra.Command{
+	Use:   "tendermint",
+	Short: "Tendermint Core (BFT Consensus) in Go",
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) (err error) {
+		if cmd.Name() == VersionCmd.Name() {
+			return nil
+		}
+		config, err = ParseConfig()
+		if err != nil {
+			return err
+		}
+		if config.LogFormat == cfg.LogFormatJSON {
+			logger = log.NewTMJSONLogger(log.NewSyncWriter(os.Stdout))
+		}
+		logger, err = tmflags.ParseLogLevel(config.LogLevel, logger, cfg.DefaultLogLevel())
+		if err != nil {
+			return err
+		}
+		if viper.GetBool(cli.TraceFlag) {
+			logger = log.NewTracingLogger(logger)
+		}
+		logger = logger.With("module", "main")
+		return nil
+	},
+}
+\end{lstlisting}
+\subsubsection{Main}
+The main.go file is where all of the commands and node functionality are integrated with the root command.  It is located in the ./cmd/tendermint/main.go file:
 \begin{lstlisting}
 package main
 
@@ -167,39 +200,9 @@ func main() {
 	}
 }
 \end{lstlisting}
-\subsubsection{Root}
-The RootCmd is found within the ./cmd/tendermint/commands/root.go file:
-\begin{lstlisting}
-// RootCmd is the root command for Tendermint core.
-var RootCmd = &cobra.Command{
-	Use:   "tendermint",
-	Short: "Tendermint Core (BFT Consensus) in Go",
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) (err error) {
-		if cmd.Name() == VersionCmd.Name() {
-			return nil
-		}
-		config, err = ParseConfig()
-		if err != nil {
-			return err
-		}
-		if config.LogFormat == cfg.LogFormatJSON {
-			logger = log.NewTMJSONLogger(log.NewSyncWriter(os.Stdout))
-		}
-		logger, err = tmflags.ParseLogLevel(config.LogLevel, logger, cfg.DefaultLogLevel())
-		if err != nil {
-			return err
-		}
-		if viper.GetBool(cli.TraceFlag) {
-			logger = log.NewTracingLogger(logger)
-		}
-		logger = logger.With("module", "main")
-		return nil
-	},
-}
-\end{lstlisting}
 \newpage
 \subsection{tendermint init}
-InitFilesCmd initialises a fresh Tendermint Core instance.  The InitFileCmd cobra command variable uses the handle "init" and is found within the ./cmd/tendermint/commands/init.go file: 
+The "tendermint init" command calls the InitFilesCmd function. InitFilesCmd initialises a fresh Tendermint Core instance.  The InitFileCmd cobra command variable uses the handle "init" and is found within the ./cmd/tendermint/commands/init.go file: 
 \begin{lstlisting}
 var InitFilesCmd = &cobra.Command{
 	Use:   "init",
@@ -750,6 +753,246 @@ Handshaker calls RequestInfo, sets the AppVersion on the state, and replays any 
 consensusLogger := logger.With("module", "consensus")
 if err := doHandshake(stateDB, state, blockStore, genDoc, eventBus, proxyApp, consensusLogger); err != nil {
 	return nil, err
+}
+\end{lstlisting}
+The doHandshake function is also found within the ./node/node.go file:
+\begin{lstlisting}
+func doHandshake(
+	stateDB dbm.DB,
+	state sm.State,
+	blockStore sm.BlockStore,
+	genDoc *types.GenesisDoc,
+	eventBus types.BlockEventPublisher,
+	proxyApp proxy.AppConns,
+	consensusLogger log.Logger) error {
+
+	handshaker := cs.NewHandshaker(stateDB, state, blockStore, genDoc)
+	handshaker.SetLogger(consensusLogger)
+	handshaker.SetEventBus(eventBus)
+	if err := handshaker.Handshake(proxyApp); err != nil {
+		return fmt.Errorf("error during handshake: %v", err)
+	}
+	return nil
+}
+\end{lstlisting}
+The NewHandShaker function handshakes with the app to figure out where it was last and uses the WAL to recover from there. NewHandShaker is locate in ./consensus/replay.go
+\begin{lstlisting}
+type Handshaker struct {
+	stateDB      dbm.DB
+	initialState sm.State
+	store        sm.BlockStore
+	eventBus     types.BlockEventPublisher
+	genDoc       *types.GenesisDoc
+	logger       log.Logger
+
+	nBlocks int // number of blocks applied to the state
+}
+
+func NewHandshaker(stateDB dbm.DB, state sm.State,
+	store sm.BlockStore, genDoc *types.GenesisDoc) *Handshaker {
+
+	return &Handshaker{
+		stateDB:      stateDB,
+		initialState: state,
+		store:        store,
+		eventBus:     types.NopEventBus{},
+		genDoc:       genDoc,
+		logger:       log.NewNopLogger(),
+		nBlocks:      0,
+	}
+}
+
+func (h *Handshaker) SetLogger(l log.Logger) {
+	h.logger = l
+}
+
+// SetEventBus - sets the event bus for publishing block related events.
+// If not called, it defaults to types.NopEventBus.
+func (h *Handshaker) SetEventBus(eventBus types.BlockEventPublisher) {
+	h.eventBus = eventBus
+}
+\end{lstlisting}
+The Handshake is done via ABCI Info on the query connection.  It then retrieves the last block height and hash. Next it sets the Appversion on the state.  Finally is replays the blocks up to the lastest in the blockstore.  The Handshake function is also found within the ./consensus/replay.go file:
+\begin{lstlisting}
+func (h *Handshaker) Handshake(proxyApp proxy.AppConns) error {
+
+	// Handshake is done via ABCI Info on the query conn.
+	res, err := proxyApp.Query().InfoSync(proxy.RequestInfo)
+	if err != nil {
+		return fmt.Errorf("error calling Info: %v", err)
+	}
+
+	blockHeight := res.LastBlockHeight
+	if blockHeight < 0 {
+		return fmt.Errorf("got a negative last block height (%d) from the app", blockHeight)
+	}
+	appHash := res.LastBlockAppHash
+
+	h.logger.Info("ABCI Handshake App Info",
+		"height", blockHeight,
+		"hash", fmt.Sprintf("%X", appHash),
+		"software-version", res.Version,
+		"protocol-version", res.AppVersion,
+	)
+
+	// Set AppVersion on the state.
+	if h.initialState.Version.Consensus.App != version.Protocol(res.AppVersion) {
+		h.initialState.Version.Consensus.App = version.Protocol(res.AppVersion)
+		sm.SaveState(h.stateDB, h.initialState)
+	}
+
+	// Replay blocks up to the latest in the blockstore.
+	_, err = h.ReplayBlocks(h.initialState, appHash, blockHeight, proxyApp)
+	if err != nil {
+		return fmt.Errorf("error on replay: %v", err)
+	}
+
+	h.logger.Info("Completed ABCI Handshake - Tendermint and App are synced",
+		"appHeight", blockHeight, "appHash", fmt.Sprintf("%X", appHash))
+
+	// TODO: (on restart) replay mempool
+
+	return nil
+}
+\end{lstlisting}
+Todo: add replay blocks section.  Out of scope for now.
+\subsubsection{Reload State}
+Reload the state. It will have the Version.Consensus.App set by the Handshake, and may have other modifications as well (ie. depending on what happened during block replay).
+\begin{lstlisting}
+state = sm.LoadState(stateDB)
+\end{lstlisting}
+The LoadState function is found within the ./state/store.go file:
+\begin{lstlisting}
+// LoadState loads the State from the database.
+func LoadState(db dbm.DB) State {
+	return loadState(db, stateKey)
+}
+
+func loadState(db dbm.DB, key []byte) (state State) {
+	buf, err := db.Get(key)
+	if err != nil {
+		panic(err)
+	}
+	if len(buf) == 0 {
+		return state
+	}
+
+	err = cdc.UnmarshalBinaryBare(buf, &state)
+	if err != nil {
+		// DATA HAS BEEN CORRUPTED OR THE SPEC HAS CHANGED
+		tmos.Exit(fmt.Sprintf(`LoadState: Data has been corrupted or its spec has changed:
+                %v\n`, err))
+	}
+	// TODO: ensure that buf is completely read.
+
+	return state
+}
+\end{lstlisting}
+\subsubsection{Mempool Reactor}
+Mempool maintains a cache of the last 10000 transactions to prevent replaying old transactions (plus transactions coming from other validators, who are continually exchanging transactions). Sending incorrectly encoded data or data exceeding maxMsgSize will result in stopping the peer.
+
+The mempool will not send a tx back to any peer which it received it from.
+
+The reactor assigns an uint16 number for each peer and maintains a map from p2p.ID to uint16.  Each mempool transaction carries a list of all the senders([]uint16)  The list is updated every time a transaction it is already seen. uint16 assumes that a node will never have over 65535 peers (0 is reserved for unknown source - e.g. RPC)
+\begin{lstlisting}
+mempoolReactor, mempool := createMempoolAndMempoolReactor(config, proxyApp, state, memplMetrics, logger)
+
+\\ Also found within the node.go file
+func createMempoolAndMempoolReactor(config *cfg.Config, proxyApp proxy.AppConns,
+	state sm.State, memplMetrics *mempl.Metrics, logger log.Logger) (*mempl.Reactor, *mempl.CListMempool) {
+
+	mempool := mempl.NewCListMempool(
+		config.Mempool,
+		proxyApp.Mempool(),
+		state.LastBlockHeight,
+		mempl.WithMetrics(memplMetrics),
+		mempl.WithPreCheck(sm.TxPreCheck(state)),
+		mempl.WithPostCheck(sm.TxPostCheck(state)),
+	)
+	mempoolLogger := logger.With("module", "mempool")
+	mempoolReactor := mempl.NewReactor(config.Mempool, mempool)
+	mempoolReactor.SetLogger(mempoolLogger)
+
+	if config.Consensus.WaitForTxs() {
+		mempool.EnableTxsAvailable()
+	}
+	return mempoolReactor, mempool
+}
+\end{lstlisting}
+The the mempool is created with the NewCListMempool function.  It create a new CListMempool, which is an ordered in-memory pool for transactions before they are proposed in a consensus round. Transaction validity is checked using the CheckTx abci message before the transaction is added to the pool. The mempool uses a concurrent list structure for storing transactions that can be efficiently accessed by multiple concurrent readers.
+
+The NewClistMempool function returns a new mempool with the given configuration and connection to an application.  It may be found within the ./mempool/clist\textunderscore mempool.go file:
+\begin{lstlisting}
+func NewCListMempool(
+	config *cfg.MempoolConfig,
+	proxyAppConn proxy.AppConnMempool,
+	height int64,
+	options ...CListMempoolOption,
+) *CListMempool {
+	mempool := &CListMempool{
+		config:        config,
+		proxyAppConn:  proxyAppConn,
+		txs:           clist.New(),
+		height:        height,
+		rechecking:    0,
+		recheckCursor: nil,
+		recheckEnd:    nil,
+		logger:        log.NewNopLogger(),
+		metrics:       NopMetrics(),
+	}
+	if config.CacheSize > 0 {
+		mempool.cache = newMapTxCache(config.CacheSize)
+	} else {
+		mempool.cache = nopTxCache{}
+	}
+	proxyAppConn.SetResponseCallback(mempool.globalCb)
+	for _, option := range options {
+		option(mempool)
+	}
+	return mempool
+}
+\end{lstlisting}
+
+The CListMempool has the following type which may be found in the ./mempool/clist\testunderscore mempool.go file:
+\begin{lstlisting}
+type CListMempool struct {
+	// Atomic integers
+	height     int64 // the last block Update()'d to
+	txsBytes   int64 // total size of mempool, in bytes
+	rechecking int32 // for re-checking filtered txs on Update()
+
+	// notify listeners (ie. consensus) when txs are available
+	notifiedTxsAvailable bool
+	txsAvailable         chan struct{} // fires once for each height, when the mempool is not empty
+
+	config *cfg.MempoolConfig
+
+	proxyMtx     sync.Mutex
+	proxyAppConn proxy.AppConnMempool
+	txs          *clist.CList // concurrent linked-list of good txs
+	preCheck     PreCheckFunc
+	postCheck    PostCheckFunc
+
+	// Track whether we're rechecking txs.
+	// These are not protected by a mutex and are expected to be mutated
+	// in serial (ie. by abci responses which are called in serial).
+	recheckCursor *clist.CElement // next expected response
+	recheckEnd    *clist.CElement // re-checking stops here
+
+	// Map for quick access to txs to record sender in CheckTx.
+	// txsMap: txKey -> CElement
+	txsMap sync.Map
+
+	// Keep a cache of already-seen txs.
+	// This reduces the pressure on the proxyApp.
+	cache txCache
+
+	// A log of mempool txs
+	wal *auto.AutoFile
+
+	logger log.Logger
+
+	metrics *Metrics
 }
 \end{lstlisting}
 \newpage
