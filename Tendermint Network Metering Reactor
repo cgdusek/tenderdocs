@@ -573,13 +573,57 @@ func saveGenesisDoc(db dbm.DB, genDoc *types.GenesisDoc) {
 }
 \end{lstlisting}
 \subsubsection{Create Proxy and ABCI Connections}
-Create the proxyApp and establish connections to the ABCI app (consensus, mempool, query).
+Create the proxyApp and establish connections to the ABCI app (consensus, mempool, query).  Tendermint uses the ABCI to interact with the ABCI applications.  ABCI applications do not interact with the outside world and define the how transactions are validated.
 \begin{lstlisting}
 proxyApp, err := createAndStartProxyAppConns(clientCreator, logger)
 if err != nil {
     return nil, err
 }
 \end{lstlisting}
+Add parameters in Config file here\newline\newline
+The helper function for Proxy creation is below:
+\begin{lstlisting}
+func createAndStartProxyAppConns(clientCreator proxy.ClientCreator, logger log.Logger) (proxy.AppConns, error) {
+	proxyApp := proxy.NewAppConns(clientCreator)
+	proxyApp.SetLogger(logger.With("module", "proxy"))
+	if err := proxyApp.Start(); err != nil {
+		return nil, fmt.Errorf("error starting proxy app connections: %v", err)
+	}
+	return proxyApp, nil
+}
+\end{lstlisting}
+NewAppConns is located in the ./proxy/multi\textunderscore app\textunderscore conn.go file:
+\begin{lstlisting}
+func NewAppConns(clientCreator ClientCreator) AppConns {
+	return NewMultiAppConn(clientCreator)
+}
+
+//-----------------------------
+// multiAppConn implements AppConns
+
+// a multiAppConn is made of a few appConns (mempool, consensus, query)
+// and manages their underlying abci clients
+// TODO: on app restart, clients must reboot together
+type multiAppConn struct {
+	service.BaseService
+
+	mempoolConn   AppConnMempool
+	consensusConn AppConnConsensus
+	queryConn     AppConnQuery
+
+	clientCreator ClientCreator
+}
+
+// Make all necessary abci connections to the application
+func NewMultiAppConn(clientCreator ClientCreator) AppConns {
+	multiAppConn := &multiAppConn{
+		clientCreator: clientCreator,
+	}
+	multiAppConn.BaseService = *service.NewBaseService(nil, "multiAppConn", multiAppConn)
+	return multiAppConn
+}
+\end{lstlisting}
+
 The ClientCreator type is found within the ./proxy/client.go file:
 \begin{lstlisting}
 type ClientCreator interface {
@@ -604,19 +648,6 @@ func DefaultClientCreator(addr, transport, dbDir string) ClientCreator {
 		mustConnect := false // loop retrying
 		return NewRemoteClientCreator(addr, transport, mustConnect)
 	}
-}
-\end{lstlisting}
-
-Add parameters in Config file here\newline\newline
-The helper function for Proxy creation is below:
-\begin{lstlisting}
-func createAndStartProxyAppConns(clientCreator proxy.ClientCreator, logger log.Logger) (proxy.AppConns, error) {
-	proxyApp := proxy.NewAppConns(clientCreator)
-	proxyApp.SetLogger(logger.With("module", "proxy"))
-	if err := proxyApp.Start(); err != nil {
-		return nil, fmt.Errorf("error starting proxy app connections: %v", err)
-	}
-	return proxyApp, nil
 }
 \end{lstlisting}
 NewABCIClient returns newly connected client that is also found within the ./proxy/client.go file:
@@ -921,39 +952,7 @@ func createMempoolAndMempoolReactor(config *cfg.Config, proxyApp proxy.AppConns,
 \end{lstlisting}
 The the mempool is created with the NewCListMempool function.  It create a new CListMempool, which is an ordered in-memory pool for transactions before they are proposed in a consensus round. Transaction validity is checked using the CheckTx abci message before the transaction is added to the pool. The mempool uses a concurrent list structure for storing transactions that can be efficiently accessed by multiple concurrent readers.
 
-The NewClistMempool function returns a new mempool with the given configuration and connection to an application.  It may be found within the ./mempool/clist\textunderscore mempool.go file:
-\begin{lstlisting}
-func NewCListMempool(
-	config *cfg.MempoolConfig,
-	proxyAppConn proxy.AppConnMempool,
-	height int64,
-	options ...CListMempoolOption,
-) *CListMempool {
-	mempool := &CListMempool{
-		config:        config,
-		proxyAppConn:  proxyAppConn,
-		txs:           clist.New(),
-		height:        height,
-		rechecking:    0,
-		recheckCursor: nil,
-		recheckEnd:    nil,
-		logger:        log.NewNopLogger(),
-		metrics:       NopMetrics(),
-	}
-	if config.CacheSize > 0 {
-		mempool.cache = newMapTxCache(config.CacheSize)
-	} else {
-		mempool.cache = nopTxCache{}
-	}
-	proxyAppConn.SetResponseCallback(mempool.globalCb)
-	for _, option := range options {
-		option(mempool)
-	}
-	return mempool
-}
-\end{lstlisting}
-
-The CListMempool has the following type which may be found in the ./mempool/clist\testunderscore mempool.go file:
+The CListMempool has the following type which may be found in the ./mempool/clist\textunderscore mempool.go file:
 \begin{lstlisting}
 type CListMempool struct {
 	// Atomic integers
@@ -995,6 +994,40 @@ type CListMempool struct {
 	metrics *Metrics
 }
 \end{lstlisting}
+
+The NewClistMempool function returns a new mempool with the given configuration and connection to an application.  It may be found within the ./mempool/clist\textunderscore mempool.go file:
+\begin{lstlisting}
+func NewCListMempool(
+	config *cfg.MempoolConfig,
+	proxyAppConn proxy.AppConnMempool,
+	height int64,
+	options ...CListMempoolOption,
+) *CListMempool {
+	mempool := &CListMempool{
+		config:        config,
+		proxyAppConn:  proxyAppConn,
+		txs:           clist.New(),
+		height:        height,
+		rechecking:    0,
+		recheckCursor: nil,
+		recheckEnd:    nil,
+		logger:        log.NewNopLogger(),
+		metrics:       NopMetrics(),
+	}
+	if config.CacheSize > 0 {
+		mempool.cache = newMapTxCache(config.CacheSize)
+	} else {
+		mempool.cache = nopTxCache{}
+	}
+	proxyAppConn.SetResponseCallback(mempool.globalCb)
+	for _, option := range options {
+		option(mempool)
+	}
+	return mempool
+}
+\end{lstlisting}
+First the mempool is created using the referencing the CListMempool type
+
 \newpage
 \subsection{Communication}
 There are three forms of communication (e.g., requests, reponses, connections) that can happen in Tendermint Core
